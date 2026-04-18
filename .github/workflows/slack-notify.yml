@@ -81,6 +81,8 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             {
+              "username": "Github Bot",
+              "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
               "text": "${{ steps.status.outputs.emoji }} ${{ inputs.job-name }} ${{ steps.status.outputs.text }} on ${{ github.repository }}@${{ github.ref_name }}",
               "attachments": [
                 {
