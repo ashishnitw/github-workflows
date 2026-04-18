@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       status:
-        description: >
+        description: |
           CI/CD status to report. One of: success, failure, cancelled, skipped.
           Defaults to the notify job's own status, which is usually 'success'.
           Callers should pass the real status explicitly, e.g.
-          status: ${{ needs.build.result }}
+          status: $${{ needs.build.result }}
         type: string
         required: false
         default: ''
