@@ -1,0 +1,146 @@
+name: Slack CI/CD Notification
+
+on:
+  workflow_call:
+    inputs:
+      status:
+        description: >
+          CI/CD status to report. One of: success, failure, cancelled, skipped.
+          Defaults to the notify job's own status, which is usually 'success'.
+          Callers should pass the real status explicitly, e.g.
+          status: ${{ needs.build.result }}
+        type: string
+        required: false
+        default: ''
+      job-name:
+        description: Friendly name of the job/pipeline being reported on.
+        type: string
+        required: false
+        default: CI/CD
+      environment:
+        description: Optional environment label (e.g. staging, production).
+        type: string
+        required: false
+        default: ''
+      custom-message:
+        description: Optional extra line appended to the Slack message.
+        type: string
+        required: false
+        default: ''
+    secrets:
+      SLACK_WEBHOOK_URL:
+        description: Slack incoming webhook URL.
+        required: true
+
+jobs:
+  notify:
+    name: Notify Slack
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve status
+        id: status
+        env:
+          INPUT_STATUS: ${{ inputs.status }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          raw="${INPUT_STATUS:-$JOB_STATUS}"
+          raw="$(echo "$raw" | tr '[:upper:]' '[:lower:]')"
+          case "$raw" in
+            success)
+              echo "emoji=:white_check_mark:" >> "$GITHUB_OUTPUT"
+              echo "color=#2eb886" >> "$GITHUB_OUTPUT"
+              echo "text=Succeeded" >> "$GITHUB_OUTPUT"
+              ;;
+            failure|failed)
+              echo "emoji=:x:" >> "$GITHUB_OUTPUT"
+              echo "color=#e01e5a" >> "$GITHUB_OUTPUT"
+              echo "text=Failed" >> "$GITHUB_OUTPUT"
+              ;;
+            cancelled|canceled)
+              echo "emoji=:no_entry_sign:" >> "$GITHUB_OUTPUT"
+              echo "color=#daa038" >> "$GITHUB_OUTPUT"
+              echo "text=Cancelled" >> "$GITHUB_OUTPUT"
+              ;;
+            skipped)
+              echo "emoji=:fast_forward:" >> "$GITHUB_OUTPUT"
+              echo "color=#808080" >> "$GITHUB_OUTPUT"
+              echo "text=Skipped" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "emoji=:grey_question:" >> "$GITHUB_OUTPUT"
+              echo "color=#808080" >> "$GITHUB_OUTPUT"
+              echo "text=${raw:-unknown}" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+          echo "normalized=$raw" >> "$GITHUB_OUTPUT"
+
+      - name: Post message to Slack
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ steps.status.outputs.emoji }} ${{ inputs.job-name }} ${{ steps.status.outputs.text }} on ${{ github.repository }}@${{ github.ref_name }}",
+              "attachments": [
+                {
+                  "color": "${{ steps.status.outputs.color }}",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "${{ steps.status.outputs.emoji }} ${{ inputs.job-name }} ${{ steps.status.outputs.text }}",
+                        "emoji": true
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Repository:*\n<https://github.com/${{ github.repository }}|${{ github.repository }}>"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Branch / Ref:*\n`${{ github.ref_name }}`"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Workflow:*\n${{ github.workflow }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Event:*\n${{ github.event_name }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Commit:*\n<https://github.com/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Triggered by:*\n${{ github.actor }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Environment:*\n${{ inputs.environment != '' && inputs.environment || '—' }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|#${{ github.run_number }} (attempt ${{ github.run_attempt }})>"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "context",
+                      "elements": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "${{ inputs.custom-message != '' && inputs.custom-message || format('Status: {0}', steps.status.outputs.normalized) }}"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
