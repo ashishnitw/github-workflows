@@ -7,8 +7,8 @@ on:
         description: |
           CI/CD status to report. One of: success, failure, cancelled, skipped.
           Defaults to the notify job's own status, which is usually 'success'.
-          Callers should pass the real status explicitly, e.g.
-          status: $${{ needs.build.result }}
+          Callers should pass the real status explicitly from the upstream
+          job, e.g. needs.<job>.result.
         type: string
         required: false
         default: ''
